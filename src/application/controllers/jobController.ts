@@ -1,8 +1,8 @@
 import { FastifyReply } from "fastify";
-import { JobService } from "../services/jobService.js";
+import { IJobUsecase } from "../../domain/usecases/index.js";
 
 export class JobController {
-  constructor(private readonly service: JobService) {}
+  constructor(private readonly service: IJobUsecase) {}
 
   async createJob(num1: number, num2: number, reply: FastifyReply): Promise<void> {
     const job = this.service.createJob(num1, num2);
