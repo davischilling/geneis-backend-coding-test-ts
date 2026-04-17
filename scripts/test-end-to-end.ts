@@ -6,25 +6,17 @@ const RESULT_URL = (jobId: string) => `${BASE_URL}/get-numbers-sum-by-job-id/${j
 const TOTAL_JOBS = Number(process.argv[2] ?? 10);
 const POLL_INTERVAL_MS = 500;
 
-type CreatedJob = {
+type JobStatus = "pending" | "processing" | "completed" | "failed";
+
+type LifecycleResult = {
+  label: string;
   jobId: string;
   num1: number;
   num2: number;
   expectedSum: number;
-  createdAt: number;
-  completedAt?: number;
-};
-
-type StatusResponse = {
-  jobId: string;
-  status: "pending" | "processing" | "completed" | "failed";
-};
-
-type ResultResponse = {
-  jobId: string;
-  status: "completed";
-  input: { num1: number; num2: number };
-  result: { sum: number };
+  finalStatus: "completed" | "failed";
+  actualSum?: number;
+  matched: boolean;
 };
 
 function randomInt(min: number, max: number): number {
@@ -35,15 +27,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function createRandomPair(): { num1: number; num2: number; expectedSum: number } {
-  const num1 = randomInt(1, 10000);
-  const num2 = randomInt(1, 10000);
-  return { num1, num2, expectedSum: num1 + num2 };
-}
-
-async function createJob(num1: number, num2: number): Promise<CreatedJob> {
-  const createdAt = performance.now();
-
+async function postAddNumbers(num1: number, num2: number): Promise<string> {
   const response = await fetch(ADD_NUMBERS_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -51,79 +35,72 @@ async function createJob(num1: number, num2: number): Promise<CreatedJob> {
   });
 
   if (!response.ok) {
-    throw new Error(`Failed to create job: ${response.status}`);
+    throw new Error(`POST /add-numbers failed with status ${response.status}`);
   }
 
-  const data = (await response.json()) as { jobId: string; status: string };
-
-  return { jobId: data.jobId, num1, num2, expectedSum: num1 + num2, createdAt };
+  const data = (await response.json()) as { jobId: string };
+  return data.jobId;
 }
 
-async function getStatus(jobId: string): Promise<StatusResponse> {
+async function getCheckNumbersState(jobId: string): Promise<JobStatus> {
   const response = await fetch(STATUS_URL(jobId));
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch status for ${jobId}: ${response.status}`);
+    throw new Error(`GET /check-numbers-state/${jobId} failed with status ${response.status}`);
   }
 
-  return (await response.json()) as StatusResponse;
+  const data = (await response.json()) as { status: JobStatus };
+  return data.status;
 }
 
-async function getResult(jobId: string): Promise<ResultResponse> {
+async function getNumbersSumByJobId(jobId: string): Promise<number> {
   const response = await fetch(RESULT_URL(jobId));
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch result for ${jobId}: ${response.status}`);
+    throw new Error(`GET /get-numbers-sum-by-job-id/${jobId} failed with status ${response.status}`);
   }
 
-  return (await response.json()) as ResultResponse;
+  const data = (await response.json()) as { result: { sum: number } };
+  return data.result.sum;
 }
 
-async function waitForAllJobs(
-  createdJobs: CreatedJob[]
-): Promise<Map<string, "completed" | "failed">> {
-  const finalStatuses = new Map<string, "completed" | "failed">();
+async function runJobLifecycle(num1: number, num2: number, index: number): Promise<LifecycleResult> {
+  const expectedSum = num1 + num2;
+  const label = `[job-${String(index + 1).padStart(2, "0")}]`;
+
+  // Step 1: create the job
+  const jobId = await postAddNumbers(num1, num2);
+  console.log(`  ${label} created  (${num1} + ${num2})  jobId: ${jobId}`);
+
+  // Step 2: poll /check-numbers-state/:jobId until the job settles
+  let lastStatus: JobStatus = "pending";
 
   while (true) {
-    const statuses = await Promise.all(createdJobs.map((job) => getStatus(job.jobId)));
+    const status = await getCheckNumbersState(jobId);
 
-    let pending = 0;
-    let processing = 0;
-    let completed = 0;
-    let failed = 0;
-
-    for (let i = 0; i < statuses.length; i++) {
-      const { status, jobId } = statuses[i];
-      const job = createdJobs[i];
-
-      if (status === "pending") {
-        pending += 1;
-      } else if (status === "processing") {
-        processing += 1;
-      } else if (status === "completed") {
-        completed += 1;
-        if (!finalStatuses.has(jobId)) {
-          finalStatuses.set(jobId, "completed");
-          job.completedAt = performance.now();
-        }
-      } else if (status === "failed") {
-        failed += 1;
-        if (!finalStatuses.has(jobId)) {
-          finalStatuses.set(jobId, "failed");
-        }
-      }
+    if (status !== lastStatus) {
+      console.log(`  ${label} status: ${status}`);
+      lastStatus = status;
     }
 
-    console.log(
-      `  pending: ${pending}  processing: ${processing}  completed: ${completed}  failed: ${failed}`
-    );
-
-    if (pending + processing === 0) break;
+    if (status === "completed" || status === "failed") break;
 
     await sleep(POLL_INTERVAL_MS);
   }
 
-  return finalStatuses;
+  // Step 3: if completed, fetch the result from /get-numbers-sum-by-job-id/:jobId
+  if (lastStatus === "completed") {
+    const actualSum = await getNumbersSumByJobId(jobId);
+    const matched = actualSum === expectedSum;
+
+    console.log(
+      `  ${label} result: ${actualSum}  expected: ${expectedSum}  ${matched ? "OK" : "MISMATCH"}`
+    );
+
+    return { label, jobId, num1, num2, expectedSum, finalStatus: "completed", actualSum, matched };
+  }
+
+  return { label, jobId, num1, num2, expectedSum, finalStatus: "failed", matched: false };
 }
 
 async function main(): Promise<void> {
@@ -131,79 +108,44 @@ async function main(): Promise<void> {
 
   console.log(`\n=== End-to-End Test: ${TOTAL_JOBS} jobs ===\n`);
 
-  console.log("Phase 1 — Creating jobs...");
-
-  const createResults = await Promise.allSettled(
-    Array.from({ length: TOTAL_JOBS }, () => {
-      const { num1, num2 } = createRandomPair();
-      return createJob(num1, num2);
+  const lifecycleResults = await Promise.allSettled(
+    Array.from({ length: TOTAL_JOBS }, (_, i) => {
+      const num1 = randomInt(1, 10000);
+      const num2 = randomInt(1, 10000);
+      return runJobLifecycle(num1, num2, i);
     })
   );
 
-  const createdJobs = createResults
-    .filter((r): r is PromiseFulfilledResult<CreatedJob> => r.status === "fulfilled")
+  const fulfilled = lifecycleResults
+    .filter((r): r is PromiseFulfilledResult<LifecycleResult> => r.status === "fulfilled")
     .map((r) => r.value);
 
-  const createFailures = createResults.filter((r) => r.status === "rejected").length;
-
-  console.log(`  Created: ${createdJobs.length}  |  Failed to create: ${createFailures}\n`);
-
-  if (createdJobs.length === 0) {
-    console.error("No jobs were created. Is the server running?");
-    process.exitCode = 1;
-    return;
-  }
-
-  console.log("Phase 2 — Polling statuses...");
-
-  const finalStatuses = await waitForAllJobs(createdJobs);
-
-  const completedJobs = createdJobs.filter(
-    (job) => finalStatuses.get(job.jobId) === "completed"
-  );
-  const failedCount = createdJobs.filter(
-    (job) => finalStatuses.get(job.jobId) === "failed"
-  ).length;
-
-  console.log(`\n  Settled: ${completedJobs.length} completed  |  ${failedCount} failed\n`);
-
-  console.log("Phase 3 — Fetching and verifying results...");
-
-  const verifications = await Promise.all(
-    completedJobs.map(async (job) => {
-      const result = await getResult(job.jobId);
-      return { job, result };
-    })
-  );
-
-  const mismatches = verifications.filter(
-    ({ job, result }) => result.result.sum !== job.expectedSum
-  );
+  const requestErrors = lifecycleResults.filter((r) => r.status === "rejected");
+  const completed = fulfilled.filter((r) => r.finalStatus === "completed");
+  const failed = fulfilled.filter((r) => r.finalStatus === "failed");
+  const mismatches = completed.filter((r) => !r.matched);
 
   const totalTime = ((performance.now() - startedAt) / 1000).toFixed(2);
 
   console.log("\n=== Summary ===");
   console.log(`  Total submitted:   ${TOTAL_JOBS}`);
-  console.log(`  Created:           ${createdJobs.length}`);
-  console.log(`  Completed:         ${completedJobs.length}`);
-  console.log(`  Failed:            ${failedCount}`);
+  console.log(`  Completed:         ${completed.length}`);
+  console.log(`  Failed:            ${failed.length}`);
+  console.log(`  Request errors:    ${requestErrors.length}`);
   console.log(`  Result mismatches: ${mismatches.length}`);
   console.log(`  Total elapsed:     ${totalTime}s`);
 
   if (mismatches.length > 0) {
     console.error("\nMismatched results:");
-    for (const { job, result } of mismatches) {
-      console.error(
-        `  jobId: ${job.jobId}  expected: ${job.expectedSum}  got: ${result.result.sum}`
-      );
+    for (const r of mismatches) {
+      console.error(`  ${r.label}  expected: ${r.expectedSum}  got: ${r.actualSum}`);
     }
     process.exitCode = 1;
     return;
   }
 
-  if (failedCount > 0) {
-    console.log("\nAll completed jobs returned correct results.");
-    console.warn(`Warning: ${failedCount} job(s) failed during processing.`);
+  if (requestErrors.length > 0 || failed.length > 0) {
+    console.log("\nSome jobs did not complete successfully.");
     process.exitCode = 1;
     return;
   }
