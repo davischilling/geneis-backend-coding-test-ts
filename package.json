@@ -8,8 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "load-test": "tsx scripts/load-test.ts",
-    "load-test:small": "tsx scripts/load-test-small.ts"
+    "test:e2e": "tsx scripts/test-end-to-end.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.0",
