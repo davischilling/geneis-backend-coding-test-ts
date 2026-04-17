@@ -1,5 +1,5 @@
 import type { IRepository } from "../../domain/contracts";
-import { ISumJobToJSON } from "../../domain/models/job.js";
+import { ISumJobToJSON } from "../../domain/models/job.model.js";
 
 export class InMemoryJobRepository implements IRepository<ISumJobToJSON> {
   private readonly jobs = new Map<string, ISumJobToJSON>();
@@ -12,10 +12,9 @@ export class InMemoryJobRepository implements IRepository<ISumJobToJSON> {
     return this.jobs.get(id);
   }
 
-  update(id: string, updates: Partial<ISumJobToJSON>): void {
-    const job = this.jobs.get(id);
-    if (job) {
-      Object.assign(job, updates, { updatedAt: new Date() });
+  update(id: string, data: ISumJobToJSON): void {
+    if (this.jobs.has(id)) {
+      this.jobs.set(id, data);
     }
   }
 }

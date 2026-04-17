@@ -24,6 +24,23 @@ export class JobEntity extends AbstractEntity<ISumJobToJSON> implements ISumJob 
     this.#error = data.error
   }
 
+  start(): void {
+    this.#status = "processing";
+    this.updateEntity();
+  }
+
+  complete(): void {
+    this.#status = "completed";
+    this.#result = { sum: this.#input.num1 + this.#input.num2 };
+    this.updateEntity();
+  }
+
+  fail(error: string): void {
+    this.#status = "failed";
+    this.#error = error;
+    this.updateEntity();
+  }
+
   toJSON() {
     return {
       id: this.id,

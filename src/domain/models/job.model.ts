@@ -31,5 +31,8 @@ export type ISumJobToJSON = {
 };
 
 export interface ISumJob {
+  start(): void;
+  complete(): void;
+  fail(error: string): void;
   toJSON(): ISumJobToJSON;
 }
