@@ -31,9 +31,9 @@ The server starts on `http://localhost:3000`. A health check is available at `GE
 
 ### Numbers API (with Concurrency Support)
 
-- `POST /api-name/api/v1/add-numbers` - Add numbers with async processing
-- `GET /api-name/api/v1/check-numbers-state/:jobId` - Check job status
-- `GET /api-name/api/v1/get-numbers-sum-by-job-id/:jobId` - Get job result
+- `POST /add-numbers` - Add numbers with async processing
+- `GET /check-numbers-state/:jobId` - Check job status
+- `GET /get-numbers-sum-by-job-id/:jobId` - Get job result
 
 See `REST.http` for example requests.
 
