@@ -1,0 +1,68 @@
+### Health Check
+GET http://localhost:3000/health
+
+###
+
+### Create Job - Add Numbers (with async processing)
+# Returns: 201 Created with { jobId: string, status: string }
+# Request body: { num1: number, num2: number }
+POST http://localhost:3000/add-numbers
+Content-Type: application/json
+
+{
+    "num1": 10,
+    "num2": 20
+}
+
+###
+
+### Check Job Status by ID
+# Replace <jobId> with actual job ID from add-numbers response
+# Returns: 200 OK with { jobId: string, status: string }
+# Returns: 404 Not Found with { message: "Job not found" }
+GET http://localhost:3000/check-numbers-state/<jobId>
+
+###
+
+### Get Job Result by ID
+# Replace <jobId> with actual job ID from add-numbers response
+# Returns: 200 OK with { jobId: string, status: string, input: { num1: number, num2: number }, result: { sum: number } } when completed
+# Returns: 202 Accepted with { message: "Job not completed yet" } when still processing
+# Returns: 404 Not Found with { message: "Job not found" } when job doesn't exist
+GET http://localhost:3000/get-numbers-sum-by-job-id/<jobId>
+
+###
+
+### Example: Complete Flow
+# Step 1: Create a job
+POST http://localhost:3000/add-numbers
+Content-Type: application/json
+
+{
+    "num1": 5,
+    "num2": 8
+}
+
+###
+
+# Step 2: Check status (copy jobId from Step 1 response)
+# GET http://localhost:3000/check-numbers-state/01963b2d-4c8e-7890-b123-456789abcdef
+
+###
+
+# Step 3: Get result (after ~5 seconds, copy jobId from Step 1 response)
+# GET http://localhost:3000/get-numbers-sum-by-job-id/01963b2d-4c8e-7890-b123-456789abcdef
+
+###
+
+### Example with Invalid Input (Validation Error)
+# Returns: 400 Bad Request with { message: "Validation error" }
+POST http://localhost:3000/add-numbers
+Content-Type: application/json
+
+{
+    "num1": "not a number",
+    "num2": true
+}
+
+###
