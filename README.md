@@ -48,5 +48,3 @@ See `REST.http` for example requests.
 📊 **Task Status Management** - Track pending, success, and failed tasks
 
 🧪 **Load Testing Scripts** - Built-in scripts to test concurrent behavior
-
-For more details on load testing, see [docs/LOAD_TEST_GUIDE.md](docs/LOAD_TEST_GUIDE.md)
